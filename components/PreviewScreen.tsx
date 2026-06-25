@@ -1382,7 +1382,16 @@ function ShimmerCtaButton({ title, onPress }: { title: string; onPress: () => vo
 }
 
 export default function PreviewScreen({ navigation }: any) {
-  const { width, height } = useWindowDimensions();
+  const windowSize = useWindowDimensions();
+
+  // Для web-публикации на Netlify фиксируем экран как мобильный холст.
+  // Иначе браузер меняет пропорции viewport, фон crop'ается через cover,
+  // а интерактивные круги уезжают от своих мест.
+  const width = Platform.OS === "web" ? Math.min(windowSize.width, 430) : windowSize.width;
+  const height =
+    Platform.OS === "web"
+      ? Math.round(width * (PREVIEW_BACKGROUND_HEIGHT / PREVIEW_BACKGROUND_WIDTH))
+      : Math.round(width * (PREVIEW_BACKGROUND_HEIGHT / PREVIEW_BACKGROUND_WIDTH));
 
   // ✅ ЕДИНСТВЕННЫЙ источник истины
   const eco = useContext(EcosystemContext) as any;
@@ -1398,19 +1407,16 @@ export default function PreviewScreen({ navigation }: any) {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const layout = useMemo(() => {
-    // Повторяем resizeMode="cover": картинка масштабируется и сдвигается,
-    // а круги получают тот же scale/offset. Так они ложатся прямо на фоновые круги.
-    const bgScale = Math.max(width / PREVIEW_BACKGROUND_WIDTH, height / PREVIEW_BACKGROUND_HEIGHT);
-    const renderedBgWidth = PREVIEW_BACKGROUND_WIDTH * bgScale;
-    const renderedBgHeight = PREVIEW_BACKGROUND_HEIGHT * bgScale;
-    const bgOffsetX = (width - renderedBgWidth) / 2;
-    const bgOffsetY = (height - renderedBgHeight) / 2;
+    // На web-фоне используем resizeMode="stretch" внутри холста с исходным aspect-ratio.
+    // Поэтому координаты кругов считаются напрямую от размеров холста.
+    const renderedBgWidth = width;
+    const renderedBgHeight = height;
 
     const mapCircle = (circle: BgCircle) => {
       const size = circle.d * renderedBgWidth;
       const center = {
-        x: bgOffsetX + circle.cx * renderedBgWidth,
-        y: bgOffsetY + circle.cy * renderedBgHeight,
+        x: circle.cx * renderedBgWidth,
+        y: circle.cy * renderedBgHeight,
       };
 
       return {
@@ -1654,25 +1660,37 @@ export default function PreviewScreen({ navigation }: any) {
     >
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-      <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="cover" style={StyleSheet.absoluteFill} />
+      <ScrollView
+        style={styles.previewScroll}
+        contentContainerStyle={[
+          styles.previewScrollContent,
+          { minHeight: windowSize.height, paddingVertical: Platform.OS === "web" ? 0 : 0 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <View style={[styles.previewCanvas, { width, height }]}>
+          <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="stretch" style={StyleSheet.absoluteFill} />
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
-        <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => openApp("sdelaiZa")} />
-      </Animated.View>
+          <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
+            <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => openApp("sdelaiZa")} />
+          </Animated.View>
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pAvatar.x, top: layout.pAvatar.y }]}>
-        <AvatarOrb size={layout.avatarSize} avatarUri={avatarUri} onPress={() => setShowRegister(true)} />
-      </Animated.View>
+          <Animated.View style={[styles.orbWrap, { left: layout.pAvatar.x, top: layout.pAvatar.y }]}>
+            <AvatarOrb size={layout.avatarSize} avatarUri={avatarUri} onPress={() => setShowRegister(true)} />
+          </Animated.View>
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
-        <GlowingOrb size={layout.midSize} icon="heart-outline" onPress={() => openApp("zadrugim")} />
-      </Animated.View>
+          <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
+            <GlowingOrb size={layout.midSize} icon="heart-outline" onPress={() => openApp("zadrugim")} />
+          </Animated.View>
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
-        <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => openApp("sledimZa")} />
-      </Animated.View>
+          <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
+            <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => openApp("sledimZa")} />
+          </Animated.View>
 
-      <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
+          <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
+        </View>
+      </ScrollView>
 
       <RegisterModal
         visible={showRegister}
@@ -1686,6 +1704,16 @@ export default function PreviewScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#EAF4FF" },
+  previewScroll: { flex: 1, width: "100%" },
+  previewScrollContent: {
+    alignItems: "center",
+    backgroundColor: "#EAF4FF",
+  },
+  previewCanvas: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#EAF4FF",
+  },
   orbWrap: { position: "absolute" },
 
   mist: {
