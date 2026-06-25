@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "MyApp",
+    "slug": "my-app",
+    "ios": {
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Приложению нужен доступ к галерее, чтобы вы могли загружать фото и видео."
+      }
+    }
+  }
+}
+
