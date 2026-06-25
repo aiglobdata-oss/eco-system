@@ -1672,21 +1672,91 @@ export default function PreviewScreen({ navigation }: any) {
         <View style={[styles.previewCanvas, { width, height }]}>
           <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="stretch" style={StyleSheet.absoluteFill} />
 
-          <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
-            <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => openApp("sdelaiZa")} />
-          </Animated.View>
+          {Platform.OS === "web" ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="СделайЗА"
+                onPress={() => openApp("sdelaiZa")}
+                style={[
+                  styles.webHotspot,
+                  {
+                    left: layout.pTop.x,
+                    top: layout.pTop.y,
+                    width: layout.topSize,
+                    height: layout.topSize,
+                    borderRadius: layout.topSize / 2,
+                  },
+                ]}
+              />
 
-          <Animated.View style={[styles.orbWrap, { left: layout.pAvatar.x, top: layout.pAvatar.y }]}>
-            <AvatarOrb size={layout.avatarSize} avatarUri={avatarUri} onPress={() => setShowRegister(true)} />
-          </Animated.View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Регистрация"
+                onPress={() => setShowRegister(true)}
+                style={[
+                  styles.webHotspot,
+                  {
+                    left: layout.pAvatar.x,
+                    top: layout.pAvatar.y,
+                    width: layout.avatarSize,
+                    height: layout.avatarSize,
+                    borderRadius: layout.avatarSize / 2,
+                  },
+                ]}
+              />
 
-          <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
-            <GlowingOrb size={layout.midSize} icon="heart-outline" onPress={() => openApp("zadrugim")} />
-          </Animated.View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="ЗАдружи"
+                onPress={() => openApp("zadrugim")}
+                style={[
+                  styles.webHotspot,
+                  {
+                    left: layout.pMid.x,
+                    top: layout.pMid.y,
+                    width: layout.midSize,
+                    height: layout.midSize,
+                    borderRadius: layout.midSize / 2,
+                  },
+                ]}
+              />
 
-          <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
-            <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => openApp("sledimZa")} />
-          </Animated.View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="СледиЗА"
+                onPress={() => openApp("sledimZa")}
+                style={[
+                  styles.webHotspot,
+                  {
+                    left: layout.pBot.x,
+                    top: layout.pBot.y,
+                    width: layout.botSize,
+                    height: layout.botSize,
+                    borderRadius: layout.botSize / 2,
+                  },
+                ]}
+              />
+            </>
+          ) : (
+            <>
+              <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
+                <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => openApp("sdelaiZa")} />
+              </Animated.View>
+
+              <Animated.View style={[styles.orbWrap, { left: layout.pAvatar.x, top: layout.pAvatar.y }]}>
+                <AvatarOrb size={layout.avatarSize} avatarUri={avatarUri} onPress={() => setShowRegister(true)} />
+              </Animated.View>
+
+              <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
+                <GlowingOrb size={layout.midSize} icon="heart-outline" onPress={() => openApp("zadrugim")} />
+              </Animated.View>
+
+              <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
+                <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => openApp("sledimZa")} />
+              </Animated.View>
+            </>
+          )}
 
           <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
         </View>
@@ -1715,6 +1785,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EAF4FF",
   },
   orbWrap: { position: "absolute" },
+  webHotspot: { position: "absolute", backgroundColor: "transparent", zIndex: 20 },
 
   mist: {
     ...StyleSheet.absoluteFillObject,
