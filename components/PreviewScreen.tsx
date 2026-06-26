@@ -1362,7 +1362,7 @@ export default function PreviewScreen({ navigation }: any) {
       left: Math.round((width - stageWidth) / 2),
       top: 0,
     };
-  }, [stage.width, stage.height]);
+  }, [width, height]);
 
   // ✅ ЕДИНСТВЕННЫЙ источник истины
   const eco = useContext(EcosystemContext) as any;
