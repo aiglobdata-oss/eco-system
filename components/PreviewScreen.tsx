@@ -1,202 +1,215 @@
 // components/PreviewScreen.tsx
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
   Animated,
   Easing,
-  Platform,
-  useWindowDimensions,
-  StatusBar,
   ImageBackground,
-  Modal,
-  TextInput,
-  ScrollView,
   KeyboardAvoidingView,
-  Alert,
-  ToastAndroid,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Picker } from "@react-native-picker/picker";
 import { EcosystemContext } from "../EcosystemContext";
 
 type AppKey = "sdelaiZa" | "zadrugim" | "sledimZa";
-type Point = { x: number; y: number };
 
-const COPY: Record<AppKey, { title: string; subtitle: string; description: string }> = {
-  sdelaiZa: {
-    title: "СделайЗА",
-    subtitle: "Приложение услуг",
-    description: "Заказывайте, предлагайте и находите решения рядом с вами",
-  },
-  zadrugim: {
-    title: "ЗАдружи",
-    subtitle: "Приложение знакомств",
-    description: "Находите единомышленников по взаимным интересам. Лайки, встречи, общение",
-  },
-  sledimZa: {
-    title: "СледиЗА",
-    subtitle: "Социальная сеть",
-    description: "Делитесь навыками, фото, видео и идеями. Повышайте свой рейтинг",
-  },
+type NavLike = {
+  navigate?: (name: string, params?: any) => void;
+  push?: (name: string, params?: any) => void;
+  goBack?: () => void;
+  canGoBack?: () => boolean;
 };
 
-// Фоновая картинка, к которой привязаны динамичные ободы.
-// Координаты ниже рассчитаны для макета 881x1785, который ты прислал.
-// Если в проекте картинка лежит под другим именем, поменяй только эту строку.
+type PreviewScreenProps = {
+  navigation?: NavLike;
+};
+
 const PREVIEW_BACKGROUND = require("../bg.jpg");
-// Важно: не используем Image.resolveAssetSource, потому что в твоей среде
-// он недоступен. Размеры указаны вручную по PNG "no buttle.png".
-const PREVIEW_BACKGROUND_WIDTH = 881;
-const PREVIEW_BACKGROUND_HEIGHT = 1785;
 
-const ENABLE_IDLE_FLOAT = false;
+// Реальный размер постера. Вся геометрия ниже считается только от него.
+// Поэтому web, Android, iPhone и десктоп больше не "разъезжаются".
+const POSTER_W = 881;
+const POSTER_H = 1785;
+const POSTER_RATIO = POSTER_H / POSTER_W;
 
-type BgCircle = { cx: number; cy: number; d: number };
+const MAX_WEB_WIDTH = 430;
+const MIN_SIDE_PADDING = 0;
 
-const BACKGROUND_CIRCLES: Record<"top" | "mid" | "bot", BgCircle> = {
-  // Это НЕ рисует новые круги. Это только невидимые зоны нажатия поверх PNG.
-  // Координаты подогнаны под реальные центры нарисованных иконок в bg.jpg 881x1785.
-  // cx — вправо/влево, cy — вверх/вниз, d — размер зоны нажатия.
-  top: { cx: 568 / 881, cy: 381 / 1785, d: 230 / 881 },
-  mid: { cx: 533 / 881, cy: 1031 / 1785, d: 225 / 881 },
-  bot: { cx: 525 / 881, cy: 1319 / 1785, d: 230 / 881 },
+const TAP_ZONES: Record<AppKey, { x: number; y: number; w: number; h: number }> = {
+  sdelaiZa: { x: 40, y: 215, w: 800, h: 390 },
+  zadrugim: { x: 40, y: 655, w: 800, h: 390 },
+  sledimZa: { x: 40, y: 1090, w: 800, h: 390 },
 };
 
-// Для отладки можно поставить true — появятся тонкие красные рамки зон нажатия.
-// В боевой версии обязательно false.
-const DEBUG_HOTSPOTS = false;
+const STAR_SEED = [
+  { x: 0.12, y: 0.07, s: 2.0, d: 0 },
+  { x: 0.22, y: 0.12, s: 1.4, d: 180 },
+  { x: 0.38, y: 0.08, s: 1.8, d: 420 },
+  { x: 0.63, y: 0.09, s: 1.5, d: 260 },
+  { x: 0.78, y: 0.12, s: 2.2, d: 620 },
+  { x: 0.91, y: 0.18, s: 1.6, d: 130 },
+  { x: 0.16, y: 0.23, s: 2.4, d: 520 },
+  { x: 0.31, y: 0.29, s: 1.5, d: 760 },
+  { x: 0.49, y: 0.24, s: 2.0, d: 90 },
+  { x: 0.73, y: 0.27, s: 1.3, d: 340 },
+  { x: 0.86, y: 0.34, s: 1.9, d: 820 },
+  { x: 0.08, y: 0.39, s: 1.5, d: 410 },
+  { x: 0.26, y: 0.46, s: 2.2, d: 230 },
+  { x: 0.52, y: 0.42, s: 1.4, d: 680 },
+  { x: 0.68, y: 0.50, s: 2.1, d: 40 },
+  { x: 0.92, y: 0.48, s: 1.7, d: 540 },
+  { x: 0.13, y: 0.58, s: 2.1, d: 300 },
+  { x: 0.37, y: 0.61, s: 1.4, d: 720 },
+  { x: 0.58, y: 0.66, s: 1.9, d: 170 },
+  { x: 0.82, y: 0.62, s: 2.4, d: 470 },
+  { x: 0.20, y: 0.74, s: 1.5, d: 860 },
+  { x: 0.44, y: 0.79, s: 2.2, d: 240 },
+  { x: 0.69, y: 0.76, s: 1.6, d: 610 },
+  { x: 0.88, y: 0.84, s: 2.0, d: 120 },
+  { x: 0.11, y: 0.90, s: 1.8, d: 730 },
+  { x: 0.33, y: 0.93, s: 2.3, d: 390 },
+  { x: 0.61, y: 0.91, s: 1.5, d: 570 },
+  { x: 0.80, y: 0.96, s: 2.1, d: 210 },
+];
 
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
+function routeFor(appKey: AppKey) {
+  if (appKey === "sdelaiZa") return "SdelaiZa";
+  if (appKey === "sledimZa") return "SlediZa";
+  return "Zadrugim";
 }
-function dist(a: Point, b: Point) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  return Math.sqrt(dx * dx + dy * dy);
+
+function formatPhoneRU(input: string) {
+  const digits = input.replace(/\D/g, "");
+  let d = digits;
+  if (d.startsWith("8")) d = "7" + d.slice(1);
+  if (!d.startsWith("7")) d = "7" + d;
+  d = d.slice(0, 11);
+
+  const rest = d.slice(1);
+  const a = rest.slice(0, 3);
+  const b = rest.slice(3, 6);
+  const c = rest.slice(6, 8);
+  const e = rest.slice(8, 10);
+
+  let out = "+7";
+  if (a.length) out += ` (${a}`;
+  if (a.length === 3) out += ")";
+  if (b.length) out += ` ${b}`;
+  if (c.length) out += `-${c}`;
+  if (e.length) out += `-${e}`;
+  return out;
 }
-function angleDeg(a: Point, b: Point) {
-  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim().toLowerCase());
 }
 
-/**
- * Фоновое мерцание звёзд — всегда активно.
- */
-function StarField({ width, height }: { width: number; height: number }) {
-  const stars = useRef(
-    Array.from({ length: 85 }, (_, i) => {
-      const isMedium = i % 5 === 0;
-      const size = isMedium ? 3.4 + Math.random() * 2.4 : 1.8 + Math.random() * 1.6;
-
-      const opacity = new Animated.Value(0.25 + Math.random() * 0.55);
-      const scale = new Animated.Value(0.9 + Math.random() * 0.6);
-
-      const tint =
-        i % 7 === 0
-          ? "rgba(255,235,250,1)"
-          : i % 3 === 0
-          ? "rgba(210,235,255,1)"
-          : "rgba(255,255,255,1)";
-
-      return {
-        id: i,
-        x: Math.random(),
-        y: Math.random(),
-        size,
-        opacity,
-        scale,
-        tint,
-        isMedium,
-      };
-    })
-  ).current;
+function SparkleField({
+  width,
+  height,
+  scale,
+}: {
+  width: number;
+  height: number;
+  scale: number;
+}) {
+  const values = useRef(STAR_SEED.map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
-    const loops: Animated.CompositeAnimation[] = [];
+    const loops = values.map((v, index) => {
+      const baseDelay = STAR_SEED[index].d;
+      const duration = 2600 + (index % 5) * 360;
 
-    stars.forEach((s) => {
-      const dur = 1200 + Math.random() * 2200;
-      const delay = Math.random() * 900;
-
-      const anim = Animated.loop(
+      const loop = Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
-          Animated.parallel([
-            Animated.timing(s.opacity, {
-              toValue: 0.18 + Math.random() * 0.35,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-            Animated.timing(s.scale, {
-              toValue: 0.85 + Math.random() * 0.7,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(s.opacity, {
-              toValue: 0.45 + Math.random() * 0.55,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-            Animated.timing(s.scale, {
-              toValue: 1.05 + Math.random() * 0.85,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-          ]),
+          Animated.delay(baseDelay),
+          Animated.timing(v, {
+            toValue: 1,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
+          Animated.timing(v, {
+            toValue: 0,
+            duration,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: true,
+          }),
         ])
       );
 
-      loops.push(anim);
-      anim.start();
+      loop.start();
+      return loop;
     });
 
     return () => loops.forEach((l) => l.stop());
-  }, [stars]);
+  }, [values]);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {stars.map((s) => {
-        const left = s.x * width;
-        const top = s.y * height;
-        const haloSize = s.size * (s.isMedium ? 4.2 : 3.2);
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {STAR_SEED.map((star, index) => {
+        const value = values[index];
+        const size = Math.max(1.4, star.s * scale);
+        const halo = size * 7.2;
+
+        const opacity = value.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0.12, 0.72, 0.18],
+        });
+
+        const haloOpacity = value.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0.03, 0.18, 0.04],
+        });
+
+        const starScale = value.interpolate({
+          inputRange: [0, 0.5, 1],
+          outputRange: [0.65, 1.35, 0.85],
+        });
 
         return (
-          <View key={`star-${s.id}`} style={{ position: "absolute", left, top }}>
+          <View
+            key={`spark-${index}`}
+            style={{
+              position: "absolute",
+              left: star.x * width,
+              top: star.y * height,
+            }}
+          >
             <Animated.View
               style={[
                 styles.starHalo,
                 {
-                  width: haloSize,
-                  height: haloSize,
-                  borderRadius: haloSize / 2,
-                  backgroundColor: s.tint,
-                  opacity: s.opacity,
-                  transform: [{ scale: s.scale }],
-                  left: -haloSize / 2,
-                  top: -haloSize / 2,
+                  width: halo,
+                  height: halo,
+                  borderRadius: halo / 2,
+                  left: -halo / 2,
+                  top: -halo / 2,
+                  opacity: haloOpacity,
+                  transform: [{ scale: starScale }],
                 },
               ]}
             />
             <Animated.View
               style={[
-                styles.star,
+                styles.starDot,
                 {
-                  width: s.size,
-                  height: s.size,
-                  borderRadius: s.size / 2,
-                  backgroundColor: s.tint,
-                  opacity: s.opacity,
-                  transform: [{ scale: s.scale }],
-                  left: -s.size / 2,
-                  top: -s.size / 2,
+                  width: size,
+                  height: size,
+                  borderRadius: size / 2,
+                  left: -size / 2,
+                  top: -size / 2,
+                  opacity,
+                  transform: [{ scale: starScale }],
                 },
               ]}
             />
@@ -207,463 +220,179 @@ function StarField({ width, height }: { width: number; height: number }) {
   );
 }
 
-/**
- * ДНК/нейросетка: top->mid->bot->top (активна только НЕ в idle).
- */
-function DnaNeuralOverlay({
+function SoftEnergyFlow({
   width,
-  centers,
-  orbSize,
+  height,
 }: {
   width: number;
   height: number;
-  centers: Point[];
-  orbSize: number;
 }) {
-  const [t, setT] = useState(0);
+  const drift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    let raf = 0;
-    const start = Date.now();
-    const loop = () => {
-      const elapsed = (Date.now() - start) / 1000;
-      const speed = 0.18;
-      setT((elapsed * speed) % 1);
-      raf = requestAnimationFrame(loop);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, {
+          toValue: 1,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(drift, {
+          toValue: 0,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [drift]);
+
+  const translateY = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, height * 0.018],
+  });
+
+  const opacity = drift.interpolate({
+    inputRange: [0, 0.55, 1],
+    outputRange: [0.08, 0.22, 0.1],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.energyLayer,
+        {
+          width,
+          height,
+          opacity,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <View style={[styles.energyOrb, { right: -width * 0.18, top: height * 0.18, width: width * 0.42, height: width * 0.42 }]} />
+      <View style={[styles.energyOrbPink, { left: -width * 0.22, top: height * 0.56, width: width * 0.38, height: width * 0.38 }]} />
+    </Animated.View>
+  );
+}
+
+function CardSheen({
+  zone,
+  scale,
+  delay,
+}: {
+  zone: { x: number; y: number; w: number; h: number };
+  scale: number;
+  delay: number;
+}) {
+  const sweep = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const sweepLoop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(sweep, {
+          toValue: 1,
+          duration: 5200,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(sweep, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.delay(900),
+      ])
+    );
+
+    sweepLoop.start();
+
+    return () => {
+      sweepLoop.stop();
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [delay, sweep]);
 
-  const [cTop, cMid, cBot] = centers;
+  const left = zone.x * scale;
+  const top = zone.y * scale;
+  const width = zone.w * scale;
+  const height = zone.h * scale;
+  const radius = Math.max(26, 58 * scale);
 
-  const amp = Math.max(10, Math.min(width * 0.045, 26));
-  const lineCount = 26;
+  const translateX = sweep.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width * 0.72, width * 1.2],
+  });
 
-  const buildPoint = (s: number) => {
-    const seg = s * 3;
-    let base: Point;
+  const bandOpacity = sweep.interpolate({
+    inputRange: [0, 0.16, 0.5, 0.84, 1],
+    outputRange: [0, 0.08, 0.22, 0.08, 0],
+  });
 
-    if (seg < 1) {
-      const p = seg;
-      base = { x: lerp(cTop.x, cMid.x, p), y: lerp(cTop.y, cMid.y, p) };
-    } else if (seg < 2) {
-      const p = seg - 1;
-      base = { x: lerp(cMid.x, cBot.x, p), y: lerp(cMid.y, cBot.y, p) };
-    } else {
-      const p = seg - 2;
-      base = { x: lerp(cBot.x, cTop.x, p), y: lerp(cBot.y, cTop.y, p) };
-    }
+  const coreOpacity = sweep.interpolate({
+    inputRange: [0, 0.25, 0.52, 0.76, 1],
+    outputRange: [0, 0.03, 0.18, 0.04, 0],
+  });
 
-    const theta = s * Math.PI * 2 * 2.2;
-    const dx = Math.cos(theta) * amp;
-    const dy = Math.sin(theta) * (amp * 0.35);
-
-    return { base, dx, dy };
-  };
-
-  const strandA: Point[] = [];
-  const strandB: Point[] = [];
-
-  for (let i = 0; i < lineCount; i++) {
-    const phase = i / lineCount;
-    const s = (t + phase) % 1;
-
-    const p = buildPoint(s);
-    const squeeze = 0.55 + 0.45 * Math.sin(s * Math.PI);
-    const dx = p.dx * squeeze;
-    const dy = p.dy * squeeze;
-
-    strandA.push({ x: p.base.x + dx, y: p.base.y + dy });
-    strandB.push({ x: p.base.x - dx, y: p.base.y - dy });
-  }
-
-  const buildLines = (pts: Point[], keyPrefix: string) => {
-    const lines: React.ReactNode[] = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i];
-      const b = pts[i + 1];
-      const len = dist(a, b);
-      const ang = angleDeg(a, b);
-      lines.push(
-        <View
-          key={`${keyPrefix}-l-${i}`}
-          style={[
-            styles.dnaLine,
-            {
-              left: a.x,
-              top: a.y,
-              width: len,
-              transform: [{ rotate: `${ang}deg` }],
-            },
-          ]}
-        />
-      );
-    }
-    return lines;
-  };
-
-  const buildNodes = (pts: Point[], keyPrefix: string, opacityBase: number) => {
-    return pts.map((p, i) => {
-      const size = 3 + (i % 3);
-      const o = opacityBase + 0.35 * Math.sin((t + i / pts.length) * Math.PI * 2);
-      return (
-        <View
-          key={`${keyPrefix}-n-${i}`}
-          style={[
-            styles.dnaNode,
-            {
-              left: p.x - size / 2,
-              top: p.y - size / 2,
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              opacity: Math.max(0.08, Math.min(0.95, o)),
-            },
-          ]}
-        />
-      );
-    });
-  };
-
-  const rungs = strandA.map((a, i) => {
-    if (i % 3 !== 0) return null;
-    const b = strandB[i];
-    const len = dist(a, b);
-    const ang = angleDeg(a, b);
-    return (
-      <View
-        key={`r-${i}`}
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.cardSheenClip,
+        {
+          left,
+          top,
+          width,
+          height,
+          borderRadius: radius,
+        },
+      ]}
+    >
+      {/* Убрано: прямоугольная рамка/аура давала некрасивые горизонтальные линии.
+          Оставлены только диагональные блики sheenBand/sheenCore. */}
+      <Animated.View
         style={[
-          styles.dnaRung,
+          styles.sheenBand,
           {
-            left: a.x,
-            top: a.y,
-            width: len,
-            transform: [{ rotate: `${ang}deg` }],
+            width: Math.max(54, width * 0.22),
+            height: height * 1.9,
+            opacity: bandOpacity,
+            transform: [
+              { translateX },
+              { translateY: -height * 0.42 },
+              { rotate: "18deg" },
+            ],
           },
         ]}
       />
-    );
-  });
-
-  const clipPadding = orbSize * 0.08;
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <View style={[StyleSheet.absoluteFill, { padding: clipPadding }]}>
-        {buildLines(strandA, "a")}
-        {buildLines(strandB, "b")}
-        {rungs}
-        {buildNodes(strandA, "a", 0.45)}
-        {buildNodes(strandB, "b", 0.32)}
-      </View>
-    </View>
-  );
-}
-
-function InvisibleHotspot({
-  size,
-  label,
-  onPress,
-}: {
-  size: number;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={18}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.hotspot,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          opacity: DEBUG_HOTSPOTS ? 1 : pressed ? 0.08 : 0,
-        },
-      ]}
-    />
-  );
-}
-
-function InfoCard({
-  data,
-  appKey,
-  side,
-  top,
-  anchorX,
-  onClose,
-  navigation,
-}: {
-  data: { title: string; subtitle: string; description: string };
-  appKey: AppKey;
-  side: "left" | "right";
-  top: number;
-  anchorX: number;
-  onClose: () => void;
-  navigation: any;
-}) {
-  const anim = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 180,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 800,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    pulseLoop.start();
-
-    return () => pulseLoop.stop();
-  }, [anim, pulse]);
-
-  const cardWidth = 270;
-  const left = side === "left" ? Math.max(12, anchorX - cardWidth - 18) : anchorX + 18;
-
-  const translateX = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [side === "left" ? -10 : 10, 0],
-  });
-
-  const goScale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.15],
-  });
-
-  const goOpacity = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.7, 1],
-  });
-
-  const showInDevNotice = () => {
-    const msg = "Приложение в разработке ожидайте пожалуйста.";
-
-    if (Platform.OS === "web") {
-      (globalThis as any)?.alert?.(msg);
-      return;
-    }
-
-    if (Platform.OS === "android") {
-      ToastAndroid.show(msg, ToastAndroid.SHORT);
-      return;
-    }
-
-    Alert.alert("", msg);
-  };
-
-  const openApp = () => {
-    if (appKey === "sdelaiZa") {
-      onClose();
-      navigation.navigate("SdelaiZa");
-      return;
-    }
-
-    if (appKey === "sledimZa") {
-      onClose();
-      navigation.navigate("SlediZa");
-      return;
-    }
-
-    if (appKey === "zadrugim") {
-      showInDevNotice();
-      return;
-    }
-  };
-
-  return (
-    <>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
       <Animated.View
         style={[
-          styles.infoCard,
+          styles.sheenCore,
           {
-            width: cardWidth,
-            top,
-            left,
-            opacity: anim,
-            transform: [{ translateX }, { scale: anim }],
+            width: Math.max(18, width * 0.055),
+            height: height * 1.9,
+            opacity: coreOpacity,
+            transform: [
+              { translateX },
+              { translateY: -height * 0.42 },
+              { rotate: "18deg" },
+            ],
           },
         ]}
-      >
-        <Text style={styles.infoTitle}>{data.title}</Text>
-        <Text style={styles.infoSubtitle}>{data.subtitle}</Text>
-        <Text style={styles.infoText}>{data.description}</Text>
-
-        <Pressable style={styles.goBtn} onPress={openApp}>
-          <Animated.View
-            style={[
-              styles.goBtnInner,
-              {
-                transform: [{ scale: goScale }],
-                opacity: goOpacity,
-              },
-            ]}
-          >
-            <Text style={styles.goText}>GO</Text>
-          </Animated.View>
-        </Pressable>
-      </Animated.View>
-    </>
-  );
-}
-
-function ConfettiAnimation({ onFinish }: { onFinish: () => void }) {
-  const particles = useRef(
-    Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      x: new Animated.Value(Math.random() * 100),
-      y: new Animated.Value(100),
-      opacity: new Animated.Value(1),
-      color: [
-        "rgba(120,100,255,0.9)",
-        "rgba(255,120,220,0.9)",
-        "rgba(90,240,255,0.9)",
-        "rgba(255,200,60,0.9)",
-        "rgba(100,255,150,0.9)",
-        "rgba(255,100,100,0.9)",
-      ][i % 6],
-      size: 6 + Math.random() * 8,
-      targetX: Math.random() * 100,
-      targetY: Math.random() * 60,
-    }))
-  ).current;
-
-  useEffect(() => {
-    const anims = particles.map((p) =>
-      Animated.parallel([
-        Animated.timing(p.y, {
-          toValue: p.targetY,
-          duration: 600 + Math.random() * 400,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
-        }),
-        Animated.timing(p.x, {
-          toValue: p.targetX,
-          duration: 600 + Math.random() * 400,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: false,
-        }),
-        Animated.sequence([
-          Animated.delay(1200),
-          Animated.timing(p.opacity, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: false,
-          }),
-        ]),
-      ])
-    );
-    Animated.parallel(anims).start();
-    const timer = setTimeout(() => onFinish(), 2000);
-    return () => clearTimeout(timer);
-  }, [onFinish, particles]);
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {particles.map((p) => {
-        const left = p.x.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] });
-        const top = p.y.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] });
-        return (
-          <Animated.View
-            key={p.id}
-            style={{
-              position: "absolute",
-              left: left as any,
-              top: top as any,
-              width: p.size,
-              height: p.size,
-              borderRadius: p.size / 2,
-              backgroundColor: p.color,
-              opacity: p.opacity,
-            }}
-          />
-        );
-      })}
+      />
     </View>
   );
 }
 
-function SuccessScreen({ onClose }: { onClose: () => void }) {
-  const [apps, setApps] = useState({
-    sdelaiZa: true,
-    zadrugim: true,
-    sledimZa: true,
-  });
-
-  const toggleApp = (key: "sdelaiZa" | "zadrugim" | "sledimZa") => {
-    setApps((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
+function PremiumCardSheens({ scale }: { scale: number }) {
   return (
-    <View style={successStyles.container}>
-      <Text style={successStyles.title}>Поздравляем!</Text>
-      <Text style={successStyles.description}>
-        Ты вступил в нашу ЭКО систему. Теперь тебе будут доступны бесплатно 3 приложения, используй их по мере необходимости.
-      </Text>
-
-      <View style={successStyles.appList}>
-        <View style={successStyles.appRow}>
-          <Text style={successStyles.appName}>СделайЗА</Text>
-          <Pressable
-            style={[successStyles.toggle, apps.sdelaiZa && successStyles.toggleActive]}
-            onPress={() => toggleApp("sdelaiZa")}
-          >
-            <View style={[successStyles.toggleThumb, apps.sdelaiZa && successStyles.toggleThumbActive]} />
-          </Pressable>
-        </View>
-
-        <View style={successStyles.appRow}>
-          <Text style={successStyles.appName}>ЗАдружи</Text>
-          <Pressable
-            style={[successStyles.toggle, apps.zadrugim && successStyles.toggleActive]}
-            onPress={() => toggleApp("zadrugim")}
-          >
-            <View style={[successStyles.toggleThumb, apps.zadrugim && successStyles.toggleThumbActive]} />
-          </Pressable>
-        </View>
-
-        <View style={successStyles.appRow}>
-          <Text style={successStyles.appName}>СледиЗА</Text>
-          <Pressable
-            style={[successStyles.toggle, apps.sledimZa && successStyles.toggleActive]}
-            onPress={() => toggleApp("sledimZa")}
-          >
-            <View style={[successStyles.toggleThumb, apps.sledimZa && successStyles.toggleThumbActive]} />
-          </Pressable>
-        </View>
-      </View>
-
-      <Text style={successStyles.hint}>
-        Отключай и включай свои приложения. Когда кнопка активна — твой профиль виден другим пользователям.
-      </Text>
-
-      <Pressable style={successStyles.closeBtn} onPress={onClose}>
-        <Text style={successStyles.closeBtnText}>Продолжить</Text>
-      </Pressable>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <CardSheen zone={TAP_ZONES.sdelaiZa} scale={scale} delay={0} />
+      <CardSheen zone={TAP_ZONES.zadrugim} scale={scale} delay={850} />
+      <CardSheen zone={TAP_ZONES.sledimZa} scale={scale} delay={1700} />
     </View>
   );
 }
@@ -671,391 +400,127 @@ function SuccessScreen({ onClose }: { onClose: () => void }) {
 function RegisterModal({
   visible,
   onClose,
-  setProfile,
-  isRegistered,
 }: {
   visible: boolean;
   onClose: () => void;
-  setProfile: (p: any | null) => void;
-  isRegistered: boolean;
 }) {
+  const { setProfile } = useContext(EcosystemContext);
   const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState("Ростов-на-Дону");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("+7 ");
-  const [smsCode, setSmsCode] = useState("1111");
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-
-  const [errors, setErrors] = useState({
-    name: false,
-    city: false,
-    email: false,
-    phone: false,
-    smsCode: false,
-  });
+  const [phone, setPhone] = useState("+7");
+  const [code, setCode] = useState("1111");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!visible) return;
-    setShowConfetti(false);
-    setShowSuccess(!!isRegistered);
-  }, [visible, isRegistered]);
+    setError("");
+  }, [visible]);
 
-  const confirmLogoutAll = () => {
-    const title = "Выход";
-    const message = "Вы действительно хотите выйти из всех приложений?";
+  const submit = () => {
+    const cleanName = name.trim();
+    const cleanCity = city.trim();
+    const cleanEmail = email.trim();
+    const phoneDigits = phone.replace(/\D/g, "");
 
-    const doLogout = () => {
-      setProfile(null);
-      setShowSuccess(false);
-      setShowConfetti(false);
-      onClose();
-    };
-
-    if (Platform.OS === "web") {
-      const ok = (globalThis as any)?.confirm?.(message) ?? false;
-      if (ok) doLogout();
+    if (cleanName.length < 2) {
+      setError("Введите имя минимум из 2 символов.");
       return;
     }
-
-    Alert.alert(title, message, [
-      { text: "Нет", style: "cancel" },
-      { text: "Да", style: "destructive", onPress: doLogout },
-    ]);
-  };
-
-  const validateEmail = (value: string) => {
-    const v = value.trim().toLowerCase();
-    const atIndex = v.indexOf("@");
-    if (atIndex === -1) return false;
-
-    const local = v.slice(0, atIndex);
-    const domain = v.slice(atIndex + 1);
-    if (local.length < 3) return false;
-
-    const allowedDomains = new Set([
-      "gmail.com",
-      "yandex.ru",
-      "yandex.com",
-      "ya.ru",
-      "mail.ru",
-      "bk.ru",
-      "inbox.ru",
-      "list.ru",
-      "rambler.ru",
-      "outlook.com",
-      "hotmail.com",
-      "live.com",
-      "icloud.com",
-      "me.com",
-      "mac.com",
-      "proton.me",
-      "protonmail.com",
-      "yahoo.com",
-    ]);
-
-    if (!allowedDomains.has(domain)) return false;
-    if (/\s/.test(local) || /\s/.test(domain)) return false;
-
-    return true;
-  };
-
-  const getPhoneDigits = (value: string) => value.replace(/\D/g, "");
-
-  const CITIES = [
-    "Абакан",
-    "Альметьевск",
-    "Ангарск",
-    "Архангельск",
-    "Астрахань",
-    "Балаково",
-    "Барнаул",
-    "Белгород",
-    "Бийск",
-    "Благовещенск",
-    "Братск",
-    "Брянск",
-    "Великий Новгород",
-    "Владивосток",
-    "Владикавказ",
-    "Владимир",
-    "Волгоград",
-    "Волжский",
-    "Вологда",
-    "Воронеж",
-    "Грозный",
-    "Дзержинск",
-    "Екатеринбург",
-    "Златоуст",
-    "Иваново",
-    "Ижевск",
-    "Иркутск",
-    "Казань",
-    "Калининград",
-    "Калуга",
-    "Каменск-Уральский",
-    "Кемерово",
-    "Киров",
-    "Ковров",
-    "Комсомольск-на-Амуре",
-    "Копейск",
-    "Кострома",
-    "Краснодар",
-    "Красноярск",
-    "Курган",
-    "Курск",
-    "Липецк",
-    "Магнитогорск",
-    "Махачкала",
-    "Миасс",
-    "Москва",
-    "Мурманск",
-    "Набережные Челны",
-    "Нальчик",
-    "Находка",
-    "Нижневартовск",
-    "Нижний Новгород",
-    "Нижний Тагил",
-    "Новокузнецк",
-    "Новосибирск",
-    "Норильск",
-    "Омск",
-    "Оренбург",
-    "Орёл",
-    "Орск",
-    "Пенза",
-    "Пермь",
-    "Петрозаводск",
-    "Прокопьевск",
-    "Рубцовск",
-    "Рыбинск",
-    "Рязань",
-    "Салават",
-    "Самара",
-    "Санкт-Петербург",
-    "Саранск",
-    "Саратов",
-    "Смоленск",
-    "Сочи",
-    "Ставрополь",
-    "Стерлитамак",
-    "Сургут",
-    "Сыктывкар",
-    "Таганрог",
-    "Тамбов",
-    "Тверь",
-    "Тольятти",
-    "Томск",
-    "Тула",
-    "Тюмень",
-    "Улан-Удэ",
-    "Ульяновск",
-    "Уссурийск",
-    "Уфа",
-    "Хабаровск",
-    "Чебоксары",
-    "Челябинск",
-    "Череповец",
-    "Чита",
-    "Шахты",
-    "Электросталь",
-    "Южно-Сахалинск",
-    "Якутск",
-    "Ярославль",
-  ];
-
-  const formatPhone = (text: string) => {
-    setErrors((p) => ({ ...p, phone: false }));
-
-    let digits = text.replace(/\D/g, "");
-    if (digits.length === 0) {
-      setPhone("+7 ");
+    if (!cleanCity) {
+      setError("Введите город.");
       return;
     }
-    if (digits[0] === "8") digits = "7" + digits.slice(1);
-    if (digits[0] !== "7") digits = "7" + digits;
-    digits = digits.slice(0, 11);
-
-    let formatted = "+7";
-    if (digits.length > 1) {
-      formatted += " (" + digits.slice(1, Math.min(4, digits.length));
-      if (digits.length >= 4) {
-        formatted += ") " + digits.slice(4, Math.min(7, digits.length));
-        if (digits.length >= 7) {
-          formatted += "-" + digits.slice(7, Math.min(9, digits.length));
-          if (digits.length >= 9) {
-            formatted += "-" + digits.slice(9, 11);
-          }
-        }
-      }
+    if (!isValidEmail(cleanEmail)) {
+      setError("Введите корректную почту.");
+      return;
     }
-    setPhone(formatted);
-  };
-
-  const handleRegister = () => {
-    const nameOk = name.trim().length > 0;
-    const cityOk = city.trim().length > 0;
-    const emailOk = validateEmail(email);
-    const phoneOk = getPhoneDigits(phone).length === 11;
-    const codeOk = smsCode.trim() === "1111";
-
-    const nextErrors = {
-      name: !nameOk,
-      city: !cityOk,
-      email: !emailOk,
-      phone: !phoneOk,
-      smsCode: !codeOk,
-    };
-
-    setErrors(nextErrors);
-
-    const hasAnyError = Object.values(nextErrors).some(Boolean);
-    if (hasAnyError) return;
+    if (phoneDigits.length !== 11 || !phoneDigits.startsWith("7")) {
+      setError("Введите номер телефона в формате РФ.");
+      return;
+    }
+    if (code.trim() !== "1111") {
+      setError("Тестовый код: 1111.");
+      return;
+    }
 
     setProfile({
-      name: name.trim(),
-      city: city.trim(),
-      email: email.trim(),
+      name: cleanName,
+      city: cleanCity,
+      email: cleanEmail,
       phoneMain: phone,
       phoneExtra: "",
       address: "",
     });
 
-    setShowConfetti(true);
-  };
-
-  const handleConfettiFinish = () => {
-    setShowConfetti(false);
-    setShowSuccess(true);
-  };
-
-  const handleClose = () => {
-    setShowSuccess(false);
-    setShowConfetti(false);
-    setName("");
-    setCity("");
-    setEmail("");
-    setPhone("+7 ");
-    setSmsCode("1111");
-    setErrors({
-      name: false,
-      city: false,
-      email: false,
-      phone: false,
-      smsCode: false,
-    });
     onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.modalRoot}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+          <View style={styles.modalBackdrop} />
+        </Pressable>
 
         <View style={styles.modalCard}>
-          {showSuccess ? (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={successStyles.scrollContent}>
-              <SuccessScreen onClose={handleClose} />
-            </ScrollView>
-          ) : (
-            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalTitle}>Регистрация</Text>
+          <View style={styles.modalGlow} />
+          <Pressable onPress={onClose} style={styles.modalClose} hitSlop={10}>
+            <Ionicons name="close" size={22} color="#1D1B4C" />
+          </Pressable>
 
-              <Text style={styles.fieldLabel}>Имя</Text>
-              <TextInput
-                style={[styles.input, errors.name && styles.inputError]}
-                placeholder="Введите имя"
-                placeholderTextColor="rgba(30,20,70,0.35)"
-                value={name}
-                onChangeText={(v) => {
-                  setName(v);
-                  if (errors.name) setErrors((p) => ({ ...p, name: false }));
-                }}
-              />
+          <Text style={styles.modalTitle}>Единый вход</Text>
+          <Text style={styles.modalSub}>
+            Один профиль для СделайЗА, ЗАдружи и СледиЗА. Код для теста: 1111
+          </Text>
 
-              <Text style={styles.fieldLabel}>Город</Text>
-              <View style={[styles.pickerWrap, errors.city && styles.pickerWrapError]}>
-                <Picker
-                 mode="dropdown"
-                  selectedValue={city}
-                  onValueChange={(val) => {
-                    const v = String(val);
-                    setCity(v);
-                    if (errors.city) setErrors((p) => ({ ...p, city: false }));
-                  }}
-                  style={styles.picker}
-                  dropdownIconColor="rgba(30,20,70,0.5)"
-                >
-                  <Picker.Item label="Выберите город" value="" color="rgba(30,20,70,0.35)" />
-                  {CITIES.map((c) => (
-                    <Picker.Item key={c} label={c} value={c} color="rgba(30,20,70,0.85)" />
-                  ))}
-                </Picker>
-              </View>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Имя"
+            placeholderTextColor="rgba(29,27,76,0.42)"
+            style={styles.input}
+          />
+          <TextInput
+            value={city}
+            onChangeText={setCity}
+            placeholder="Город"
+            placeholderTextColor="rgba(29,27,76,0.42)"
+            style={styles.input}
+          />
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Почта"
+            placeholderTextColor="rgba(29,27,76,0.42)"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            style={styles.input}
+          />
+          <TextInput
+            value={phone}
+            onChangeText={(v) => setPhone(formatPhoneRU(v))}
+            placeholder="+7 (999) 999-99-99"
+            placeholderTextColor="rgba(29,27,76,0.42)"
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
+          <TextInput
+            value={code}
+            onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))}
+            placeholder="Код из SMS"
+            placeholderTextColor="rgba(29,27,76,0.42)"
+            keyboardType="number-pad"
+            style={styles.input}
+          />
 
-              <Text style={styles.fieldLabel}>Почта</Text>
-              <TextInput
-                style={[styles.input, errors.email && styles.inputError]}
-                placeholder="example@mail.com"
-                placeholderTextColor="rgba(30,20,70,0.35)"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  if (errors.email) setErrors((p) => ({ ...p, email: false }));
-                }}
-              />
+          {!!error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-              <Text style={styles.fieldLabel}>Номер телефона</Text>
-              <TextInput
-                style={[styles.input, errors.phone && styles.inputError]}
-                placeholder="+7 (___) ___-__-__"
-                placeholderTextColor="rgba(30,20,70,0.35)"
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={formatPhone}
-              />
-
-              <Text style={styles.fieldLabel}>Код из SMS</Text>
-              <TextInput
-                style={[styles.input, errors.smsCode && styles.inputError]}
-                placeholder="1111"
-                placeholderTextColor="rgba(30,20,70,0.35)"
-                keyboardType="number-pad"
-                value={smsCode}
-                onChangeText={(v) => {
-                  setSmsCode(v.replace(/\D/g, "").slice(0, 6));
-                  if (errors.smsCode) setErrors((p) => ({ ...p, smsCode: false }));
-                }}
-              />
-
-              <View style={styles.regInfoRow}>
-                <View style={styles.lockBadge}>
-                  <Ionicons name="lock-closed" size={16} color="rgba(255,255,255,0.95)" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.regInfoTitle}>Единая регистрация — доступ ко всем трём приложениям</Text>
-                  <Text style={styles.regInfoText}>Управляйте своей видимостью и настройками приватности</Text>
-                </View>
-              </View>
-
-              <Pressable style={styles.submitBtn} onPress={handleRegister}>
-                <Text style={styles.submitBtnText}>Зарегистрироваться</Text>
-              </Pressable>
-            </ScrollView>
-          )}
-
-          {showConfetti && <ConfettiAnimation onFinish={handleConfettiFinish} />}
-
-          <Pressable
-            style={styles.modalCloseBtn}
-            onPress={() => {
-              if (isRegistered) confirmLogoutAll();
-              else handleClose();
-            }}
-          >
-            <Ionicons name={isRegistered ? "log-out-outline" : "close"} size={22} color="rgba(30,20,70,0.6)" />
+          <Pressable onPress={submit} style={styles.modalPrimary}>
+            <Text style={styles.modalPrimaryText}>Войти / зарегистрироваться</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -1063,926 +528,416 @@ function RegisterModal({
   );
 }
 
-/**
- * Кнопка: перелив "цветотенью" + звёздочки справа от текста.
- */
-function ShimmerCtaButton({ title, onPress }: { title: string; onPress: () => void }) {
-  const glow = useRef(new Animated.Value(0)).current;
-
-  const stars = useRef(
-    Array.from({ length: 3 }, (_, i) => ({
-      id: `b-${i}`,
-      o: new Animated.Value(0.35 + Math.random() * 0.35),
-      s: new Animated.Value(0.9 + Math.random() * 0.4),
-    }))
-  ).current;
+function FloatingAuthDock({
+  onPress,
+}: {
+  onPress: () => void;
+}) {
+  const { profile } = useContext(EcosystemContext);
+  const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const glowLoop = Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glow, {
+        Animated.timing(pulse, {
           toValue: 1,
-          duration: 2200,
+          duration: 1700,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
-        Animated.timing(glow, {
+        Animated.timing(pulse, {
           toValue: 0,
-          duration: 2200,
+          duration: 1700,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ])
     );
-    glowLoop.start();
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
 
-    const starLoops: Animated.CompositeAnimation[] = [];
-    stars.forEach((st) => {
-      const dur = 1200 + Math.random() * 1800;
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(st.o, {
-              toValue: 0.12 + Math.random() * 0.22,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-            Animated.timing(st.s, {
-              toValue: 0.75 + Math.random() * 0.45,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.parallel([
-            Animated.timing(st.o, {
-              toValue: 0.45 + Math.random() * 0.45,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-            Animated.timing(st.s, {
-              toValue: 0.95 + Math.random() * 0.55,
-              duration: dur * 0.5,
-              easing: Easing.inOut(Easing.sin),
-              useNativeDriver: true,
-            }),
-          ]),
-        ])
-      );
-      starLoops.push(anim);
-      anim.start();
-    });
-
-    return () => {
-      glowLoop.stop();
-      starLoops.forEach((a) => a.stop());
-    };
-  }, [glow, stars]);
-
-  const shadowOpacity = glow.interpolate({
+  const scale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.18, 0.55],
-  });
-  const shadowRadius = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [10, 26],
-  });
-  const elevation = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [4, 12],
-  });
-
-  const tintA = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.06, 0.22],
-  });
-  const tintB = glow.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.22, 0.06],
+    outputRange: [1, 1.018],
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.bottomCta,
-        {
-          shadowOpacity: shadowOpacity as any,
-          shadowRadius: shadowRadius as any,
-          elevation: elevation as any,
-        },
-      ]}
-    >
-      <Pressable style={StyleSheet.absoluteFill} onPress={onPress} />
-
-      <Animated.View pointerEvents="none" style={[styles.ctaTintA, { opacity: tintA as any }]} />
-      <Animated.View pointerEvents="none" style={[styles.ctaTintB, { opacity: tintB as any }]} />
-
-      <View pointerEvents="none" style={styles.ctaRow}>
-        <Text style={styles.bottomCtaText}>{title}</Text>
-
-        <View style={styles.ctaRightStars}>
-          {stars.map((st, idx) => (
-            <Animated.View
-              key={st.id}
-              style={[
-                styles.ctaStarDot,
-                {
-                  opacity: st.o,
-                  transform: [{ scale: st.s }],
-                  marginLeft: idx === 0 ? 0 : 6,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-    </Animated.View>
+    <View pointerEvents="box-none" style={styles.dockWrap}>
+      <Animated.View style={[styles.dockShadow, { transform: [{ scale }] }]}>
+        <Pressable onPress={onPress} style={styles.dock}>
+          <View style={styles.dockIcon}>
+            <Ionicons name={profile ? "person" : "sparkles"} size={18} color="#FFFFFF" />
+          </View>
+          <Text style={styles.dockText} numberOfLines={1}>
+            {profile ? `Привет, ${profile.name}` : "Войти / Зарегистрироваться"}
+          </Text>
+          <View style={styles.dockDots}>
+            <View style={styles.dockDot} />
+            <View style={[styles.dockDot, { opacity: 0.55 }]} />
+            <View style={[styles.dockDot, { opacity: 0.3 }]} />
+          </View>
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }
 
-export default function PreviewScreen({ navigation }: any) {
-  const { width, height } = useWindowDimensions();
+export default function PreviewScreen({ navigation }: PreviewScreenProps) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [registerOpen, setRegisterOpen] = useState(false);
 
-  // На широком WEB-экране не растягиваем мобильный макет на всю ширину.
-  // Иначе фон уходит в cover-zoom, а кольца становятся огромными и уезжают.
-  const stage = useMemo(() => {
-    const safeHeight = Math.max(height, 1);
-    const isWideWeb = Platform.OS === "web" && width / safeHeight > 0.75;
+  const posterWidth = useMemo(() => {
+    const base = Platform.OS === "web" ? Math.min(windowWidth, MAX_WEB_WIDTH) : windowWidth;
+    return Math.max(320, base - MIN_SIDE_PADDING * 2);
+  }, [windowWidth]);
 
-    if (!isWideWeb) {
-      return { width, height, left: 0, top: 0 };
-    }
+  const posterHeight = posterWidth * POSTER_RATIO;
+  const scale = posterWidth / POSTER_W;
 
-    const mobileWidth = Math.round(safeHeight * (PREVIEW_BACKGROUND_WIDTH / PREVIEW_BACKGROUND_HEIGHT));
-    const stageWidth = Math.min(width, mobileWidth);
+  const openApp = (appKey: AppKey) => {
+    const routeName = routeFor(appKey);
 
-    return {
-      width: stageWidth,
-      height: safeHeight,
-      left: Math.round((width - stageWidth) / 2),
-      top: 0,
-    };
-  }, [width, height]);
-
-  // ✅ ЕДИНСТВЕННЫЙ источник истины
-  const eco = useContext(EcosystemContext) as any;
-  const profile = eco?.profile ?? null;
-  const setProfile = eco?.setProfile as (p: any | null) => void;
-
-  const isRegistered = !!profile;
-
-  const [showRegister, setShowRegister] = useState(false);
-
-  const [idleMode, setIdleMode] = useState(false);
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const layout = useMemo(() => {
-    const stageWidth = stage.width;
-    const stageHeight = stage.height;
-
-    // Повторяем resizeMode="cover" внутри мобильной сцены, а не внутри всего WEB-окна.
-    // Так кольца всегда совпадают с кругами на PNG и на телефоне, и в браузере.
-    const bgScale = Math.max(stageWidth / PREVIEW_BACKGROUND_WIDTH, stageHeight / PREVIEW_BACKGROUND_HEIGHT);
-    const renderedBgWidth = PREVIEW_BACKGROUND_WIDTH * bgScale;
-    const renderedBgHeight = PREVIEW_BACKGROUND_HEIGHT * bgScale;
-    const bgOffsetX = (stageWidth - renderedBgWidth) / 2;
-    const bgOffsetY = (stageHeight - renderedBgHeight) / 2;
-
-    const mapCircle = (circle: BgCircle) => {
-      const size = circle.d * renderedBgWidth;
-      const center = {
-        x: bgOffsetX + circle.cx * renderedBgWidth,
-        y: bgOffsetY + circle.cy * renderedBgHeight,
-      };
-
-      return {
-        size,
-        x: center.x - size / 2,
-        y: center.y - size / 2,
-        center,
-      };
-    };
-
-    const top = mapCircle(BACKGROUND_CIRCLES.top);
-    const mid = mapCircle(BACKGROUND_CIRCLES.mid);
-    const bot = mapCircle(BACKGROUND_CIRCLES.bot);
-
-    const cardWidth = 270;
-    const averageOrbSize = (top.size + mid.size + bot.size) / 3;
-
-    return {
-      orbSize: averageOrbSize,
-      pTop: { x: top.x, y: top.y },
-      pMid: { x: mid.x, y: mid.y },
-      pBot: { x: bot.x, y: bot.y },
-      topSize: top.size,
-      midSize: mid.size,
-      botSize: bot.size,
-      centers: [top.center, mid.center, bot.center],
-      card: {
-        sdelaiZa: {
-          side: "left" as const,
-          top: Math.max(18, top.y + 6),
-          anchorX: top.x,
-        },
-        zadrugim: {
-          side: "right" as const,
-          top: Math.max(18, Math.min(mid.y + 6, stageHeight - 220)),
-          anchorX: Math.min(mid.x + mid.size, stageWidth - cardWidth - 12),
-        },
-        sledimZa: {
-          side: "left" as const,
-          top: Math.max(18, bot.y + 6),
-          anchorX: bot.x,
-        },
-      },
-    };
-  }, [stage.width, stage.height]);
-
-  const topOff = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const midOff = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const botOff = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-
-  const resetIdleTimer = () => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-
-    idleTimerRef.current = setTimeout(() => {
-      if (!ENABLE_IDLE_FLOAT) return;
-      setIdleMode(true);
-    }, 10000);
-
-    setIdleMode((prev) => (prev ? false : prev));
-  };
-
-  useEffect(() => {
-    resetIdleTimer();
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!idleMode) {
-      Animated.parallel([
-        Animated.spring(topOff, { toValue: { x: 0, y: 0 }, useNativeDriver: false }),
-        Animated.spring(midOff, { toValue: { x: 0, y: 0 }, useNativeDriver: false }),
-        Animated.spring(botOff, { toValue: { x: 0, y: 0 }, useNativeDriver: false }),
-      ]).start();
+    if (typeof navigation?.push === "function") {
+      navigation.push(routeName, { openedAt: Date.now() });
       return;
     }
 
-    const orbSize = layout.orbSize;
-    const radius = orbSize / 2;
-    const pad = 14;
+    if (typeof navigation?.navigate === "function") {
+      navigation.navigate(routeName, { openedAt: Date.now() });
+    }
+  };
 
-    const bounds = {
-      minX: pad,
-      maxX: stage.width - pad - orbSize,
-      minY: pad + 40,
-      maxY: stage.height - pad - orbSize - 90,
-    };
-
-    const pos = {
-      top: { x: 0, y: 0 },
-      mid: { x: 0, y: 0 },
-      bot: { x: 0, y: 0 },
-    };
-
-    const vel = {
-      top: { x: (Math.random() * 2 - 1) * 140, y: (Math.random() * 2 - 1) * 120 },
-      mid: { x: (Math.random() * 2 - 1) * 140, y: (Math.random() * 2 - 1) * 120 },
-      bot: { x: (Math.random() * 2 - 1) * 140, y: (Math.random() * 2 - 1) * 120 },
-    };
-
-    let raf = 0;
-    let last = Date.now();
-
-    const base = {
-      top: { x: layout.pTop.x, y: layout.pTop.y },
-      mid: { x: layout.pMid.x, y: layout.pMid.y },
-      bot: { x: layout.pBot.x, y: layout.pBot.y },
-    };
-
-    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-
-    const resolveCollision = (aKey: keyof typeof pos, bKey: keyof typeof pos) => {
-      const ax = base[aKey].x + pos[aKey].x + radius;
-      const ay = base[aKey].y + pos[aKey].y + radius;
-      const bx = base[bKey].x + pos[bKey].x + radius;
-      const by = base[bKey].y + pos[bKey].y + radius;
-
-      const dx = bx - ax;
-      const dy = by - ay;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      const minDist = radius * 2 * 0.96;
-
-      if (d > 0 && d < minDist) {
-        const nx = dx / d;
-        const ny = dy / d;
-        const overlap = (minDist - d) / 2;
-
-        pos[aKey].x -= nx * overlap;
-        pos[aKey].y -= ny * overlap;
-        pos[bKey].x += nx * overlap;
-        pos[bKey].y += ny * overlap;
-
-        const va = vel[aKey];
-        const vb = vel[bKey];
-
-        const vaN = va.x * nx + va.y * ny;
-        const vbN = vb.x * nx + vb.y * ny;
-
-        const impulse = vbN - vaN;
-
-        va.x += impulse * nx;
-        va.y += impulse * ny;
-
-        vb.x -= impulse * nx;
-        vb.y -= impulse * ny;
-      }
-    };
-
-    const ensureNeverStops = (k: keyof typeof vel) => {
-      const speed = Math.sqrt(vel[k].x * vel[k].x + vel[k].y * vel[k].y);
-      if (speed < 55) {
-        const angle = Math.random() * Math.PI * 2;
-        vel[k].x += Math.cos(angle) * 90;
-        vel[k].y += Math.sin(angle) * 80;
-      }
-    };
-
-    const step = () => {
-      const now = Date.now();
-      const dt = Math.min(0.032, (now - last) / 1000);
-      last = now;
-
-      const friction = 0.9992;
-
-      (["top", "mid", "bot"] as const).forEach((k) => {
-        pos[k].x += vel[k].x * dt;
-        pos[k].y += vel[k].y * dt;
-
-        const absX = base[k].x + pos[k].x;
-        const absY = base[k].y + pos[k].y;
-
-        if (absX < bounds.minX) {
-          pos[k].x += bounds.minX - absX;
-          vel[k].x *= -1;
-        } else if (absX > bounds.maxX) {
-          pos[k].x -= absX - bounds.maxX;
-          vel[k].x *= -1;
-        }
-
-        if (absY < bounds.minY) {
-          pos[k].y += bounds.minY - absY;
-          vel[k].y *= -1;
-        } else if (absY > bounds.maxY) {
-          pos[k].y -= absY - bounds.maxY;
-          vel[k].y *= -1;
-        }
-
-        vel[k].x *= friction;
-        vel[k].y *= friction;
-
-        vel[k].x += (Math.random() * 2 - 1) * 18 * dt;
-        vel[k].y += (Math.random() * 2 - 1) * 18 * dt;
-
-        vel[k].x = clamp(vel[k].x, -220, 220);
-        vel[k].y = clamp(vel[k].y, -190, 190);
-
-        ensureNeverStops(k);
-      });
-
-      resolveCollision("top", "mid");
-      resolveCollision("mid", "bot");
-      resolveCollision("top", "bot");
-
-      topOff.setValue({ x: pos.top.x, y: pos.top.y });
-      midOff.setValue({ x: pos.mid.x, y: pos.mid.y });
-      botOff.setValue({ x: pos.bot.x, y: pos.bot.y });
-
-      raf = requestAnimationFrame(step);
-    };
-
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [
-    idleMode,
-    layout.orbSize,
-    layout.pBot.x,
-    layout.pBot.y,
-    layout.pMid.x,
-    layout.pMid.y,
-    layout.pTop.x,
-    layout.pTop.y,
-    topOff,
-    midOff,
-    botOff,
-    stage.width,
-    stage.height,
-  ]);
+  const hitZone = (zone: { x: number; y: number; w: number; h: number }) => ({
+    left: zone.x * scale,
+    top: zone.y * scale,
+    width: zone.w * scale,
+    height: zone.h * scale,
+  });
 
   return (
-    <View
-      style={styles.root}
-      onTouchStart={resetIdleTimer}
-      onStartShouldSetResponderCapture={() => {
-        resetIdleTimer();
-        return false;
-      }}
-      onResponderGrant={resetIdleTimer}
-    >
-      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="#EEF7FF" />
 
-      <View style={[styles.stage, { width: stage.width, height: stage.height, left: stage.left, top: stage.top }]}> 
-        <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="cover" style={StyleSheet.absoluteFill} />
-        <View style={styles.mist} pointerEvents="none" />
+      <ScrollView
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        bounces
+        contentContainerStyle={[
+          styles.scrollContent,
+          { minHeight: Math.max(windowHeight, posterHeight), paddingBottom: 106 },
+        ]}
+      >
+        <View style={[styles.phoneFrame, Platform.OS === "web" ? styles.phoneFrameWeb : null]}>
+          <View
+            style={[
+              styles.poster,
+              {
+                width: posterWidth,
+                height: posterHeight,
+              },
+            ]}
+          >
+            <ImageBackground
+              source={PREVIEW_BACKGROUND}
+              resizeMode="stretch"
+              style={StyleSheet.absoluteFill}
+              imageStyle={styles.posterImage}
+            />
 
-        <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
-          <InvisibleHotspot size={layout.topSize} label="Открыть СделайЗА" onPress={() => navigation.navigate("SdelaiZa")} />
-        </Animated.View>
+            <SoftEnergyFlow width={posterWidth} height={posterHeight} />
+            <SparkleField width={posterWidth} height={posterHeight} scale={scale} />
+            <PremiumCardSheens scale={scale} />
 
-        <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
-          <InvisibleHotspot size={layout.midSize} label="Открыть ЗАдружи" onPress={() => navigation.navigate("Zadrugim")} />
-        </Animated.View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Открыть СделайЗА"
+              onPress={() => openApp("sdelaiZa")}
+              style={[styles.hitZone, hitZone(TAP_ZONES.sdelaiZa)]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Открыть ЗАдружи"
+              onPress={() => openApp("zadrugim")}
+              style={[styles.hitZone, hitZone(TAP_ZONES.zadrugim)]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Открыть СледиЗА"
+              onPress={() => openApp("sledimZa")}
+              style={[styles.hitZone, hitZone(TAP_ZONES.sledimZa)]}
+            />
+          </View>
+        </View>
+      </ScrollView>
 
-        <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
-          <InvisibleHotspot size={layout.botSize} label="Открыть СледиЗА" onPress={() => navigation.navigate("SlediZa")} />
-        </Animated.View>
-
-        <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
-      </View>
-
-      <RegisterModal
-        visible={showRegister}
-        onClose={() => setShowRegister(false)}
-        setProfile={setProfile}
-        isRegistered={isRegistered}
-      />
-    </View>
+      <FloatingAuthDock onPress={() => setRegisterOpen(true)} />
+      <RegisterModal visible={registerOpen} onClose={() => setRegisterOpen(false)} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#EAF4FF",
-    overflow: "hidden",
+    backgroundColor: "#EEF7FF",
   },
-  stage: {
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    alignItems: "center",
+    backgroundColor: "#EEF7FF",
+  },
+  phoneFrame: {
+    overflow: "hidden",
+    backgroundColor: "#EEF7FF",
+  },
+  phoneFrameWeb: {
+    minHeight: "100%",
+    shadowColor: "#20145D",
+    shadowOpacity: 0.18,
+    shadowRadius: 32,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  poster: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#EEF7FF",
+  },
+  posterImage: {
+    width: "100%",
+    height: "100%",
+  },
+  hitZone: {
+    position: "absolute",
+    backgroundColor: "transparent",
+  },
+
+  cardSheenClip: {
     position: "absolute",
     overflow: "hidden",
+    backgroundColor: "transparent",
   },
-  orbWrap: { position: "absolute" },
-
-  mist: {
+  cardIridescentAura: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
   },
-
-  star: {
-    position: "absolute",
-    shadowColor: "#9fd8ff",
-    shadowOpacity: 0.55,
-    shadowRadius: 8,
+  cardIridescentBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1.2,
+    borderColor: "rgba(125, 225, 255, 0.52)",
+    shadowColor: "#76E8FF",
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 2,
+  },
+  sheenBand: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.48,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  sheenCore: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 117, 224, 0.98)",
+    shadowColor: "#FF76E6",
+    shadowOpacity: 0.42,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
   },
   starHalo: {
     position: "absolute",
-    opacity: 0.22,
-    shadowColor: "#c7f0ff",
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 1,
-  },
-
-  topTitleWrap: {
-    position: "absolute",
-    top: Platform.select({ ios: 58, android: 44 }),
-    left: 18,
-    right: 18,
-    alignItems: "center",
-  },
-  topTitle: {
-    color: "rgba(30, 20, 70, 0.78)",
-    fontSize: 36,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-  topTitle2: {
-    marginTop: 2,
-    color: "rgba(30, 20, 70, 0.72)",
-    fontSize: 24,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-  },
-  topSubtitle: {
-    marginTop: 8,
-    color: "rgba(30, 20, 70, 0.55)",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  orb: { justifyContent: "center", alignItems: "center" },
-  orbPressable: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  orbPressed: {
-    opacity: 0.82,
-  },
-  orbButtonSurface: {
-    backgroundColor: "transparent",
-    shadowColor: "transparent",
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 0,
-  },
-  glass: {
-    position: "absolute",
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#7E6BFF",
-        shadowOpacity: 0.25,
-        shadowRadius: 18,
-        shadowOffset: { width: 0, height: 10 },
-      },
-      android: { elevation: 0 },
-    }),
-  },
-  ring: { position: "absolute", borderWidth: 2 },
-  ringSegment: { position: "absolute", borderWidth: 3 },
-
-  iconWrap: {
-    width: "62%",
-    height: "62%",
-    borderRadius: 999,
-    backgroundColor: "transparent",
-    borderWidth: 0,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  dnaLine: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "transparent",
-  },
-  dnaRung: {
-    position: "absolute",
-    height: 1,
-    backgroundColor: "rgba(255, 170, 235, 0.22)",
-  },
-  dnaNode: {
-    position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    shadowColor: "#9F8CFF",
-    shadowOpacity: 0.45,
-    shadowRadius: 8,
+    backgroundColor: "rgba(128, 225, 255, 1)",
+    shadowColor: "#7EEBFF",
+    shadowOpacity: 0.42,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
   },
-
-  infoCard: {
+  starDot: {
     position: "absolute",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
-    backgroundColor: "rgba(255,255,255,0.62)",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#FFFFFF",
+    shadowOpacity: 0.88,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
-  infoTitle: {
-    color: "rgba(30, 20, 70, 0.86)",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-  infoSubtitle: {
-    marginTop: 2,
-    color: "rgba(30, 20, 70, 0.64)",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  infoText: {
-    marginTop: 8,
-    color: "rgba(30, 20, 70, 0.62)",
-    fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
-    paddingRight: 40,
-  },
-
-  goBtn: {
+  energyLayer: {
     position: "absolute",
-    right: 10,
+    left: 0,
     top: 0,
-    bottom: 0,
-    width: 40,
-    alignItems: "center",
-    justifyContent: "center",
   },
-  goBtnInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(100, 100, 255, 0.75)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  goText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-
-  bottomCta: {
+  energyOrb: {
     position: "absolute",
-    left: 26,
-    right: 26,
-    bottom: 36,
+    borderRadius: 999,
+    backgroundColor: "rgba(98, 218, 255, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(98, 218, 255, 0.28)",
+  },
+  energyOrbPink: {
+    position: "absolute",
+    borderRadius: 999,
+    backgroundColor: "rgba(255, 126, 231, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 126, 231, 0.24)",
+  },
+  dockWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === "web" ? 18 : 16,
+    alignItems: "center",
+    paddingHorizontal: 18,
+  },
+  dockShadow: {
+    width: "100%",
+    maxWidth: 430,
+    borderRadius: 999,
+    shadowColor: "#7B61FF",
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  dock: {
     height: 54,
-    borderRadius: 28,
-    backgroundColor: "rgba(120, 120, 255, 0.35)",
+    borderRadius: 999,
+    backgroundColor: "rgba(144, 118, 244, 0.76)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.55)",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+  },
+  dockIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-    shadowColor: "rgba(120, 200, 255, 1)",
-    shadowOffset: { width: 0, height: 10 },
+    marginRight: 10,
   },
-
-  ctaTintA: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(140,240,255,1)",
+  dockText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "center",
   },
-  ctaTintB: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,120,220,1)",
-  },
-
-  ctaRow: {
+  dockDots: {
+    width: 34,
     flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "flex-end",
   },
-  ctaRightStars: {
-    marginLeft: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  ctaStarDot: {
+  dockDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    backgroundColor: "#FFFFFF",
+    marginLeft: 4,
   },
-
-  bottomCtaText: {
-    color: "rgba(255,255,255,0.95)",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
-  modalOverlay: {
+  modalRoot: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(13, 14, 48, 0.42)",
   },
   modalCard: {
-    width: "88%",
-    maxHeight: "85%",
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 24,
-    paddingTop: 28,
-    paddingBottom: 20,
-    paddingHorizontal: 22,
+    margin: 14,
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 22,
+    backgroundColor: "rgba(255,255,255,0.96)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.6)",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.18,
-        shadowRadius: 20,
-        shadowOffset: { width: 0, height: 8 },
-      },
-      android: { elevation: 12 },
-    }),
+    borderColor: "rgba(147, 128, 255, 0.24)",
+    shadowColor: "#1E166A",
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 10 },
+    overflow: "hidden",
   },
-  modalCloseBtn: {
+  modalGlow: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.06)",
-    justifyContent: "center",
+    right: -60,
+    top: -80,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: "rgba(116, 229, 255, 0.24)",
+  },
+  modalClose: {
+    position: "absolute",
+    right: 18,
+    top: 18,
+    zIndex: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(29,27,76,0.06)",
   },
   modalTitle: {
-    fontSize: 22,
+    color: "#1D1B4C",
+    fontSize: 26,
     fontWeight: "900",
-    color: "rgba(30,20,70,0.85)",
-    textAlign: "center",
-    marginBottom: 18,
+    letterSpacing: -0.5,
+    paddingRight: 42,
   },
-
-  fieldLabel: {
-    fontSize: 13,
+  modalSub: {
+    marginTop: 8,
+    color: "rgba(29,27,76,0.62)",
+    fontSize: 14,
     fontWeight: "700",
-    color: "rgba(30,20,70,0.6)",
-    marginBottom: 4,
-    marginTop: 10,
+    lineHeight: 20,
+    marginBottom: 14,
+    paddingRight: 10,
   },
   input: {
-    height: 46,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(120,120,255,0.25)",
-    backgroundColor: "rgba(240,242,255,0.7)",
+    borderColor: "rgba(100, 100, 200, 0.16)",
+    backgroundColor: "rgba(237, 242, 255, 0.72)",
     paddingHorizontal: 14,
+    color: "#1D1B4C",
     fontSize: 15,
-    color: "rgba(30,20,70,0.85)",
-  },
-  pickerWrap: {
-  height: 46,
-  borderRadius: 14,
-  borderWidth: 1,
-  borderColor: "rgba(120,120,255,0.25)",
-  backgroundColor: "rgba(240,242,255,0.7)",
-  overflow: "hidden",
-  justifyContent: "center",
-},
-
-picker: {
-  height: 46,
-  width: "100%",
-  color: "rgba(30,20,70,0.85)",
-  fontSize: 15,
-  backgroundColor: "transparent",
-
-  // ✅ Убираем “внутреннюю” рамку у select на WEB
-  ...(Platform.OS === "web"
-    ? ({
-        outlineStyle: "none",
-        outlineWidth: 0,
-        borderWidth: 0,
-        boxShadow: "none",
-        appearance: "none",
-        paddingLeft: 12,
-        paddingRight: 34, // чтобы текст не залезал под стрелку
-      } as any)
-    : null),
-},
-
-  regInfoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 18,
-    backgroundColor: "rgba(240,242,255,0.6)",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  lockBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: "rgba(70, 90, 180, 0.70)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  regInfoTitle: {
-    color: "rgba(20, 16, 50, 0.82)",
-    fontSize: 13,
     fontWeight: "800",
+    marginTop: 10,
   },
-  regInfoText: {
-    marginTop: 2,
-    color: "rgba(20, 16, 50, 0.55)",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  submitBtn: {
-    marginTop: 18,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(100, 100, 255, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  submitBtnText: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-
-  inputError: {
-    borderColor: "rgba(255, 60, 60, 0.9)",
-  },
-  pickerWrapError: {
-    borderColor: "rgba(255, 60, 60, 0.9)",
-  },
-});
-
-const successStyles = StyleSheet.create({
-  scrollContent: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    paddingTop: 10,
-    paddingHorizontal: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "rgba(30,20,70,0.85)",
-    textAlign: "center",
-    marginBottom: 14,
-  },
-  description: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "rgba(30,20,70,0.65)",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  appList: {
-    marginBottom: 20,
-  },
-  appRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(240,242,255,0.7)",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "rgba(120,120,255,0.15)",
-    marginBottom: 14,
-  },
-  appName: {
-    fontSize: 17,
+  errorText: {
+    color: "#E11D48",
     fontWeight: "800",
-    color: "rgba(30,20,70,0.82)",
-  },
-  toggle: {
-    width: 52,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(200,200,210,0.5)",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  toggleActive: {
-    backgroundColor: "rgba(120,100,255,0.75)",
-  },
-  toggleThumb: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    alignSelf: "flex-start",
-  },
-  toggleThumbActive: {
-    alignSelf: "flex-end",
-  },
-  hint: {
     fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(30,20,70,0.5)",
+    marginTop: 12,
     textAlign: "center",
-    lineHeight: 18,
-    marginBottom: 20,
   },
-  closeBtn: {
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(100, 100, 255, 0.8)",
-    justifyContent: "center",
+  modalPrimary: {
+    marginTop: 16,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "#6C4CFF",
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6C4CFF",
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
   },
-  closeBtnText: {
-    color: "#fff",
-    fontSize: 17,
+  modalPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "900",
   },
 });
-
-
-
-
