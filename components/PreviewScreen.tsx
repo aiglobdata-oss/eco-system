@@ -523,10 +523,6 @@ function GlowingOrb({
             },
           ]}
         />
-
-        <View style={styles.iconWrap} pointerEvents="none">
-          <Ionicons name={icon} size={Math.max(30, Math.round(size * 0.34))} color="rgba(235,245,255,0.96)" />
-        </View>
       </View>
     </Pressable>
   );
@@ -1347,6 +1343,27 @@ function ShimmerCtaButton({ title, onPress }: { title: string; onPress: () => vo
 export default function PreviewScreen({ navigation }: any) {
   const { width, height } = useWindowDimensions();
 
+  // На широком WEB-экране не растягиваем мобильный макет на всю ширину.
+  // Иначе фон уходит в cover-zoom, а кольца становятся огромными и уезжают.
+  const stage = useMemo(() => {
+    const safeHeight = Math.max(height, 1);
+    const isWideWeb = Platform.OS === "web" && width / safeHeight > 0.75;
+
+    if (!isWideWeb) {
+      return { width, height, left: 0, top: 0 };
+    }
+
+    const mobileWidth = Math.round(safeHeight * (PREVIEW_BACKGROUND_WIDTH / PREVIEW_BACKGROUND_HEIGHT));
+    const stageWidth = Math.min(width, mobileWidth);
+
+    return {
+      width: stageWidth,
+      height: safeHeight,
+      left: Math.round((width - stageWidth) / 2),
+      top: 0,
+    };
+  }, [stage.width, stage.height]);
+
   // ✅ ЕДИНСТВЕННЫЙ источник истины
   const eco = useContext(EcosystemContext) as any;
   const profile = eco?.profile ?? null;
@@ -1360,13 +1377,16 @@ export default function PreviewScreen({ navigation }: any) {
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const layout = useMemo(() => {
-    // Повторяем resizeMode="cover": картинка масштабируется и сдвигается,
-    // а круги получают тот же scale/offset. Так они ложатся прямо на фоновые круги.
-    const bgScale = Math.max(width / PREVIEW_BACKGROUND_WIDTH, height / PREVIEW_BACKGROUND_HEIGHT);
+    const stageWidth = stage.width;
+    const stageHeight = stage.height;
+
+    // Повторяем resizeMode="cover" внутри мобильной сцены, а не внутри всего WEB-окна.
+    // Так кольца всегда совпадают с кругами на PNG и на телефоне, и в браузере.
+    const bgScale = Math.max(stageWidth / PREVIEW_BACKGROUND_WIDTH, stageHeight / PREVIEW_BACKGROUND_HEIGHT);
     const renderedBgWidth = PREVIEW_BACKGROUND_WIDTH * bgScale;
     const renderedBgHeight = PREVIEW_BACKGROUND_HEIGHT * bgScale;
-    const bgOffsetX = (width - renderedBgWidth) / 2;
-    const bgOffsetY = (height - renderedBgHeight) / 2;
+    const bgOffsetX = (stageWidth - renderedBgWidth) / 2;
+    const bgOffsetY = (stageHeight - renderedBgHeight) / 2;
 
     const mapCircle = (circle: BgCircle) => {
       const size = circle.d * renderedBgWidth;
@@ -1407,8 +1427,8 @@ export default function PreviewScreen({ navigation }: any) {
         },
         zadrugim: {
           side: "right" as const,
-          top: Math.max(18, Math.min(mid.y + 6, height - 220)),
-          anchorX: Math.min(mid.x + mid.size, width - cardWidth - 12),
+          top: Math.max(18, Math.min(mid.y + 6, stageHeight - 220)),
+          anchorX: Math.min(mid.x + mid.size, stageWidth - cardWidth - 12),
         },
         sledimZa: {
           side: "left" as const,
@@ -1458,9 +1478,9 @@ export default function PreviewScreen({ navigation }: any) {
 
     const bounds = {
       minX: pad,
-      maxX: width - pad - orbSize,
+      maxX: stage.width - pad - orbSize,
       minY: pad + 40,
-      maxY: height - pad - orbSize - 90,
+      maxY: stage.height - pad - orbSize - 90,
     };
 
     const pos = {
@@ -1599,8 +1619,8 @@ export default function PreviewScreen({ navigation }: any) {
     topOff,
     midOff,
     botOff,
-    width,
-    height,
+    stage.width,
+    stage.height,
   ]);
 
   return (
@@ -1615,12 +1635,11 @@ export default function PreviewScreen({ navigation }: any) {
     >
       <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
-      <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="cover" style={StyleSheet.absoluteFill} />
-      <View style={styles.mist} pointerEvents="none" />
+      <View style={[styles.stage, { width: stage.width, height: stage.height, left: stage.left, top: stage.top }]}> 
+        <ImageBackground source={PREVIEW_BACKGROUND} resizeMode="cover" style={StyleSheet.absoluteFill} />
+        <View style={styles.mist} pointerEvents="none" />
 
-
-
-      <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
+        <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
         <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => navigation.navigate("SdelaiZa")} />
       </Animated.View>
 
@@ -1632,7 +1651,8 @@ export default function PreviewScreen({ navigation }: any) {
         <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => navigation.navigate("SlediZa")} />
       </Animated.View>
 
-      <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
+        <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
+      </View>
 
       <RegisterModal
         visible={showRegister}
@@ -1645,7 +1665,15 @@ export default function PreviewScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#EAF4FF" },
+  root: {
+    flex: 1,
+    backgroundColor: "#EAF4FF",
+    overflow: "hidden",
+  },
+  stage: {
+    position: "absolute",
+    overflow: "hidden",
+  },
   orbWrap: { position: "absolute" },
 
   mist: {
@@ -1707,12 +1735,12 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   orbButtonSurface: {
-    backgroundColor: "rgba(14, 22, 70, 0.18)",
-    shadowColor: "#8DEAFF",
-    shadowOpacity: 0.26,
-    shadowRadius: 18,
+    backgroundColor: "transparent",
+    shadowColor: "transparent",
+    shadowOpacity: 0,
+    shadowRadius: 0,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
+    elevation: 0,
   },
   glass: {
     position: "absolute",
@@ -1735,15 +1763,10 @@ const styles = StyleSheet.create({
     width: "62%",
     height: "62%",
     borderRadius: 999,
-    backgroundColor: "rgba(20, 28, 88, 0.54)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
+    backgroundColor: "transparent",
+    borderWidth: 0,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#7DEBFF",
-    shadowOpacity: 0.24,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
   },
 
   dnaLine: {
