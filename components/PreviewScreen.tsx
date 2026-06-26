@@ -57,12 +57,17 @@ const ENABLE_IDLE_FLOAT = false;
 type BgCircle = { cx: number; cy: number; d: number };
 
 const BACKGROUND_CIRCLES: Record<"top" | "mid" | "bot", BgCircle> = {
-  // Эти числа двигают кликабельные кольца по PNG.
-  // cx — вправо/влево, cy — вверх/вниз, d — размер.
-  top: { cx: 540 / 881, cy: 361 / 1785, d: 218 / 881 },
-  mid: { cx: 489 / 881, cy: 998 / 1785, d: 202 / 881 },
-  bot: { cx: 517 / 881, cy: 1323 / 1785, d: 218 / 881 },
+  // Это НЕ рисует новые круги. Это только невидимые зоны нажатия поверх PNG.
+  // Координаты подогнаны под реальные центры нарисованных иконок в bg.jpg 881x1785.
+  // cx — вправо/влево, cy — вверх/вниз, d — размер зоны нажатия.
+  top: { cx: 568 / 881, cy: 381 / 1785, d: 230 / 881 },
+  mid: { cx: 533 / 881, cy: 1031 / 1785, d: 225 / 881 },
+  bot: { cx: 525 / 881, cy: 1319 / 1785, d: 230 / 881 },
 };
+
+// Для отладки можно поставить true — появятся тонкие красные рамки зон нажатия.
+// В боевой версии обязательно false.
+const DEBUG_HOTSPOTS = false;
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -357,174 +362,31 @@ function DnaNeuralOverlay({
   );
 }
 
-function GlowingOrb({
+function InvisibleHotspot({
   size,
-  icon,
+  label,
   onPress,
 }: {
   size: number;
-  icon: "briefcase-outline" | "heart-outline" | "people-outline";
+  label: string;
   onPress: () => void;
 }) {
-  const accessibilityLabel =
-    icon === "briefcase-outline" ? "СделайЗА" : icon === "heart-outline" ? "ЗАдружи" : "СледиЗА";
-  const ringWidth = Math.max(3, Math.round(size * 0.034));
-  const pulse = useRef(new Animated.Value(0)).current;
-  const sweep = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 2200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 2200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: false,
-        }),
-      ])
-    );
-
-    const sweepLoop = Animated.loop(
-      Animated.timing(sweep, {
-        toValue: 1,
-        duration: 1600,
-        easing: Easing.linear,
-        useNativeDriver: false,
-      })
-    );
-
-    pulseLoop.start();
-    sweepLoop.start();
-
-    return () => {
-      pulseLoop.stop();
-      sweepLoop.stop();
-    };
-  }, [pulse, sweep]);
-
-  const ringColor = useMemo(() => {
-    return pulse.interpolate({
-      inputRange: [0, 1],
-      outputRange: ["rgba(140,120,255,0.72)", "rgba(90,240,255,0.96)"],
-    });
-  }, [pulse]);
-
-  const ringGlow = useMemo(() => {
-    return pulse.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.56, 0.9],
-    });
-  }, [pulse]);
-
-  const seg1 = sweep.interpolate({
-    inputRange: [0, 0.33, 0.66, 1],
-    outputRange: [0.16, 0.92, 0.16, 0.16],
-  });
-  const seg2 = sweep.interpolate({
-    inputRange: [0, 0.33, 0.66, 1],
-    outputRange: [0.16, 0.16, 0.92, 0.16],
-  });
-  const seg3 = sweep.interpolate({
-    inputRange: [0, 0.33, 0.66, 1],
-    outputRange: [0.92, 0.16, 0.16, 0.92],
-  });
-
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      hitSlop={14}
+      accessibilityLabel={label}
+      hitSlop={18}
       onPress={onPress}
-      style={({ pressed }) => [styles.orbPressable, pressed && styles.orbPressed]}
-    >
-      <View
-        style={[
-          styles.orb,
-          styles.orbButtonSurface,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          },
-        ]}
-      >
-        <View style={[styles.glass, { width: size, height: size, borderRadius: size / 2 }]} />
-
-        <Animated.View
-          style={[
-            styles.ring,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              borderWidth: ringWidth,
-              borderColor: ringColor,
-              opacity: ringGlow,
-            },
-          ]}
-        />
-
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.ringSegment,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              borderWidth: ringWidth + 1,
-              borderTopColor: "rgba(255,120,220,0.98)",
-              borderRightColor: "rgba(100,240,255,0.98)",
-              borderBottomColor: "rgba(120,120,255,0.98)",
-              borderLeftColor: "transparent",
-              opacity: seg1,
-            },
-          ]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.ringSegment,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              borderWidth: ringWidth + 1,
-              borderTopColor: "rgba(100,240,255,0.98)",
-              borderRightColor: "rgba(120,120,255,0.98)",
-              borderBottomColor: "rgba(255,120,220,0.98)",
-              borderLeftColor: "transparent",
-              opacity: seg2,
-              transform: [{ rotate: "120deg" }],
-            },
-          ]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.ringSegment,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              borderWidth: ringWidth + 1,
-              borderTopColor: "rgba(120,120,255,0.98)",
-              borderRightColor: "rgba(255,120,220,0.98)",
-              borderBottomColor: "rgba(100,240,255,0.98)",
-              borderLeftColor: "transparent",
-              opacity: seg3,
-              transform: [{ rotate: "240deg" }],
-            },
-          ]}
-        />
-      </View>
-    </Pressable>
+      style={({ pressed }) => [
+        styles.hotspot,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          opacity: DEBUG_HOTSPOTS ? 1 : pressed ? 0.08 : 0,
+        },
+      ]}
+    />
   );
 }
 
@@ -1437,7 +1299,7 @@ export default function PreviewScreen({ navigation }: any) {
         },
       },
     };
-  }, [width, height]);
+  }, [stage.width, stage.height]);
 
   const topOff = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const midOff = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -1640,16 +1502,16 @@ export default function PreviewScreen({ navigation }: any) {
         <View style={styles.mist} pointerEvents="none" />
 
         <Animated.View style={[styles.orbWrap, { left: layout.pTop.x, top: layout.pTop.y }]}>
-        <GlowingOrb size={layout.topSize} icon="briefcase-outline" onPress={() => navigation.navigate("SdelaiZa")} />
-      </Animated.View>
+          <InvisibleHotspot size={layout.topSize} label="Открыть СделайЗА" onPress={() => navigation.navigate("SdelaiZa")} />
+        </Animated.View>
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
-        <GlowingOrb size={layout.midSize} icon="heart-outline" onPress={() => navigation.navigate("Zadrugim")} />
-      </Animated.View>
+        <Animated.View style={[styles.orbWrap, { left: layout.pMid.x, top: layout.pMid.y }]}>
+          <InvisibleHotspot size={layout.midSize} label="Открыть ЗАдружи" onPress={() => navigation.navigate("Zadrugim")} />
+        </Animated.View>
 
-      <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
-        <GlowingOrb size={layout.botSize} icon="people-outline" onPress={() => navigation.navigate("SlediZa")} />
-      </Animated.View>
+        <Animated.View style={[styles.orbWrap, { left: layout.pBot.x, top: layout.pBot.y }]}>
+          <InvisibleHotspot size={layout.botSize} label="Открыть СледиЗА" onPress={() => navigation.navigate("SlediZa")} />
+        </Animated.View>
 
         <ShimmerCtaButton title={isRegistered ? "Вход" : "Войти/Зарегистрироваться"} onPress={() => setShowRegister(true)} />
       </View>
